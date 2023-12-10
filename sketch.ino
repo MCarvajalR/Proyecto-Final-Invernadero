@@ -3,17 +3,23 @@
 #include <LiquidCrystal.h>
 #include <Keypad.h>
 #include "DHTStable.h"
-//#include "DHT.h"
-//Integrantes:
-//Miguel Angel Carvajal Ruiz
-//Cristhian Camilo Unas
-//Jhonny Richard Fuertes
+/**#include "DHT.h" */
+/**
+ * @file main.cpp
+ * @brief Código principal del sistema de control de seguridad y monitoreo ambiental.
+ * @author Miguel Angel Carvajal Ruiz
+ * @author Cristhian Camilo Unas
+ * @author Jhonny Richard Fuertes
+ */
 
-// Inicialización del objeto LiquidCrystal
+/**
+* @brief Inicialización del objeto LiquidCrystal.
+*/
 const int rs = 12, en = 11, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
-
-// Configuración del teclado
+/**
+ * @brief Configuración del teclado.
+*/
 const byte ROWS = 4;
 const byte COLS = 4;
 char keys[ROWS][COLS] = {
@@ -22,17 +28,21 @@ char keys[ROWS][COLS] = {
   {'7','8','9','C'},
   {'*','0','#','D'}
 };
-byte rowPins[ROWS] = {24, 26, 28, 30}; //connect to the row pinouts of the keypad
-byte colPins[COLS] = {32, 34, 36, 38}; //connect to the column pinouts of the keypad
+byte rowPins[ROWS] = {24, 26, 28, 30}; /**< Conectar a los pines de fila del teclado */
+byte colPins[COLS] = {32, 34, 36, 38}; /**< Conectar a los pines de columna del teclado */
 
 Keypad keypad = Keypad( makeKeymap(keys), rowPins, colPins, ROWS, COLS );
 
 #define DHT11_PIN 6
 
-// Inicialización del objeto DHTStable
+/**
+ * @brief Inicialización del objeto DHTStable.
+*/
 DHTStable DHT;
 
-// Definición de constantes y pines
+/**
+ * @brief Definición de constantes y pines.
+*/
 #define BUZZER_SENSOR 13
 const int photocellPin = A7;
 const int Led_rojo = 49;
@@ -40,7 +50,9 @@ const int Led_verde = 51;
 const int Led_azul = 53;
 #define PULSADOR 8		
 
-// Variables de contraseña y bloqueo
+/** 
+ * @brief Variables de contraseña y bloqueo.
+*/
 char password[6];
 char contrasena[6] = "00000";
 int idx = 0;
@@ -48,24 +60,32 @@ int contBloqueo = 3;
 boolean enter = false;
 int outputValue = 0;
 
-// Declaración de funciones de los estados
+/**
+ * @brief Declaración de funciones de los estados.
+*/
 void securityEntryState(void);
 void eventDoorsAndWindowsState(void);
 void environmentalMonitoringState(void);
 void environmentalAlarmState(void);
 void handleSecurityAlert(void);
 
-// Declaración de funciones auxiliares para lectura de sensores
+/**
+ * @brief Declaración de funciones auxiliares para lectura de sensores.
+*/
 void readPhotoresistor(void);
 void readTemp(void);
 
-// Declaración de tareas asíncronas
+/**
+ * @brief Declaración de tareas asíncronas.
+*/
 AsyncTask taskEnvironmentalMonitoring(2000, true, environmentalMonitoringState);
 AsyncTask taskBeforeEnvironmentalMonitoring(3000, true, eventDoorsAndWindowsState);
 AsyncTask taskAlarmAlert(3000, true, handleSecurityAlert);
 AsyncTask taskEventAlarm(3000, true, eventDoorsAndWindowsState);
 
-// Declaración de la máquina de estados y sus estados
+/**
+ * @brief Declaración de la máquina de estados y sus estados.
+*/
 StateMachine machine = StateMachine();
 State* stSecurityEntry = machine.addState(&securityEntryState);
 State* stEventDoorsAndWindows = machine.addState(&eventDoorsAndWindowsState);
@@ -79,7 +99,9 @@ void setup() {
   pinMode(Led_verde, OUTPUT);
   pinMode(Led_azul, OUTPUT);
 
-  // Agregar transiciones entre estados
+/**
+   * @brief Agregar transiciones entre estados.
+*/
   stSecurityEntry->addTransition(&checkCorrectPassword, stEventDoorsAndWindows);
   stEventDoorsAndWindows->addTransition(&checkTimeout2sec, stEnvironmentalMonitoring);
   stHandleSecurityAlert->addTransition(&checkTimeout6sec, stEventDoorsAndWindows);
@@ -89,7 +111,9 @@ void setup() {
   stEnvironmentalAlarm->addTransition(&checkTemperatureOver32_5s, stEnvironmentalAlarm);
   stEnvironmentalAlarm->addTransition(&checkTemperatureBelow30, stEnvironmentalMonitoring);
 
-  // Inicialización del objeto LiquidCrystal
+/**
+*  @brief Inicialización del objeto LiquidCrystal
+*/
   lcd.begin(16, 2);
 
   lcd.setCursor(3, 0);
@@ -105,7 +129,9 @@ void loop() {
   machine.run();
 }
 
-// Estado de ingreso de seguridad
+/**
+* @brief Estado de ingreso de seguridad
+*/
 void securityEntryState() {
   Serial.println("Ingreso de Seguridad");
   char key = keypad.getKey();
@@ -171,7 +197,10 @@ void securityEntryState() {
   }
 }
 
-// Función para verificar la contraseña ingresada
+/**
+ * @brief Función para verificar la contraseña ingresada.
+ * @return true si la contraseña es correcta, false en caso contrario.
+*/
 bool checkCorrectPassword() {
   if (strcmp(password, contrasena) == 0) {
     taskEnvironmentalMonitoring.Start();
@@ -180,13 +209,17 @@ bool checkCorrectPassword() {
   return false;
 }
 
-// Estado de doors and windows que verifica cuando las entradas de aire(puertas y ventanas) afectan la luz o humedad/temperatura
+/**
+* @brief Estado de doors and windows que verifica cuando las entradas de aire(puertas y ventanas) afectan la luz o humedad/temperatura
+*/
 void eventDoorsAndWindowsState() {
   Serial.println("Procesando ambiente");
   taskEnvironmentalMonitoring.Update();
 }
 
-// Función para verificar el tiempo de espera de 2 segundos
+/**
+* @brief Función para verificar el tiempo de espera de 2 segundos
+*/
 bool checkTimeout2sec() {
   if (!taskEnvironmentalMonitoring.IsActive()) {
     taskEnvironmentalMonitoring.Stop();
@@ -196,12 +229,16 @@ bool checkTimeout2sec() {
   return false;
 }
 
-// Función para verificar si se activó el estado door window para el ambiente
+/**
+* @brief Función para verificar si se activó el estado door window para el ambiente
+*/
 bool checkDoorWindowActivated() {
   return true;
 }
 
-// Estado de monitoreo ambiental
+/**
+* @brief Estado de monitoreo ambiental
+*/
 void environmentalMonitoringState() {
   Serial.println("Revisando estado del ambiente");
   readTemperatureAndPhotoresistor();
@@ -210,7 +247,9 @@ void environmentalMonitoringState() {
   taskBeforeEnvironmentalMonitoring.Reset();
 }
 
-// Función para verificar si la temperatura supera los 32 grados Celsius
+/**
+* @brief Función para verificar si la temperatura supera los 32 grados Celsius
+*/
 bool checkTemperatureOver32() {
   if (DHT.getTemperature() > 26) {
     taskBeforeEnvironmentalMonitoring.Stop();
@@ -222,7 +261,9 @@ bool checkTemperatureOver32() {
   return false;
 }
 
-// Función para verificar el tiempo de espera de 10 segundos
+/**
+* @brief Función para verificar el tiempo de espera de 10 segundos
+*/
 bool checkTimeout10sec() {
   if (!taskBeforeEnvironmentalMonitoring.IsActive()) {
     taskBeforeEnvironmentalMonitoring.Stop();
@@ -233,20 +274,26 @@ bool checkTimeout10sec() {
   return false;
 }
 
-// Función para leer la temperatura y el valor del fotoresistor
+/**
+* @brief Función para leer la temperatura y el valor del fotoresistor
+*/
 void readTemperatureAndPhotoresistor() {
   readTemp();
   readPhotoresistor();
 }
 
-// Estado de alarma ambiental
+/**
+* @brief Estado de alarma ambiental
+*/
 void environmentalAlarmState() {
   Serial.println("Alarma Ambiental");
   tone(BUZZER_SENSOR, 262, 250);
   taskAlarmAlert.Update();
 }
 
-// Función para verificar si la temperatura supera los 32 grados Celsius durante 5 segundos
+/**
+* @brief Función para verificar si la temperatura supera los 32 grados Celsius durante 5 segundos
+*/
 bool checkTemperatureOver32_5s() {
   Serial.println(!taskAlarmAlert.IsActive());
   if (!taskAlarmAlert.IsActive()) {
@@ -258,7 +305,9 @@ bool checkTemperatureOver32_5s() {
   return false;
 }
 
-// Función para verificar si la temperatura está por debajo de los 30 grados Celsius
+/**
+* @brief Función para verificar si la temperatura está por debajo de los 30 grados Celsius
+*/
 bool checkTemperatureBelow30() {
   if (DHT.getTemperature() < 30) {
     taskAlarmAlert.Reset();
@@ -267,13 +316,17 @@ bool checkTemperatureBelow30() {
   return false;
 }
 
-// Estado de manejo de la alerta de seguridad
+/**
+* @brief Estado de manejo de la alerta de seguridad
+*/
 void handleSecurityAlert() {
   Serial.println("Alerta de Seguridad");
   taskEventAlarm.Update();
 }
 
-// Función para verificar el tiempo de espera de 6 segundos
+/**
+* @brief Función para verificar el tiempo de espera de 6 segundos
+*/
 bool checkTimeout6sec() {
   if (!taskEventAlarm.IsActive()) {
     taskEventAlarm.Stop();
@@ -284,7 +337,9 @@ bool checkTimeout6sec() {
   return false;
 }
 
-// Función para mostrar "Procesando" en la pantalla LCD
+/**
+* @brief Función para mostrar "Procesando" en la pantalla LCD
+*/
 void processing() {
   for (int i = 0; i < 3; i++) {
     lcd.setCursor(2, 0);
@@ -303,7 +358,9 @@ void processing() {
   }
 }
 
-// Función para leer la temperatura
+/**
+* @brief Función para leer la temperatura
+*/
 void readTemp() {
   int chk = DHT.read11(DHT11_PIN);
 
@@ -337,7 +394,9 @@ void readTemp() {
   Serial.println();
 }
 
-// Función para leer el valor del fotoresistor
+/**
+* @brief Función para leer el valor del fotoresistor
+*/
 void readPhotoresistor() {
 
   int lightIntensity = analogRead(photocellPin);
