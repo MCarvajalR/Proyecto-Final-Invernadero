@@ -3,7 +3,6 @@
 #include <LiquidCrystal.h>
 #include <Keypad.h>
 #include "DHTStable.h"
-/**#include "DHT.h" */
 /**
  * @file main.cpp
  * @brief Código principal del sistema de control de seguridad y monitoreo ambiental.
@@ -48,7 +47,6 @@ const int photocellPin = A7;
 const int Led_rojo = 49;
 const int Led_verde = 51;
 const int Led_azul = 53;
-#define PULSADOR 8		
 
 /** 
  * @brief Variables de contraseña y bloqueo.
@@ -64,7 +62,7 @@ int outputValue = 0;
  * @brief Declaración de funciones de los estados.
 */
 void securityEntryState(void);
-void eventDoorsAndWindowsState(void);
+void eventAmbiente(void);
 void environmentalMonitoringState(void);
 void environmentalAlarmState(void);
 void handleSecurityAlert(void);
@@ -79,16 +77,16 @@ void readTemp(void);
  * @brief Declaración de tareas asíncronas.
 */
 AsyncTask taskEnvironmentalMonitoring(2000, true, environmentalMonitoringState);
-AsyncTask taskBeforeEnvironmentalMonitoring(3000, true, eventDoorsAndWindowsState);
+AsyncTask taskBeforeEnvironmentalMonitoring(3000, true, eventAmbiente);
 AsyncTask taskAlarmAlert(3000, true, handleSecurityAlert);
-AsyncTask taskEventAlarm(3000, true, eventDoorsAndWindowsState);
+AsyncTask taskEventAlarm(3000, true, eventAmbiente);
 
 /**
  * @brief Declaración de la máquina de estados y sus estados.
 */
 StateMachine machine = StateMachine();
 State* stSecurityEntry = machine.addState(&securityEntryState);
-State* stEventDoorsAndWindows = machine.addState(&eventDoorsAndWindowsState);
+State* stEventAmbiente = machine.addState(&eventAmbiente);
 State* stEnvironmentalMonitoring = machine.addState(&environmentalMonitoringState);
 State* stEnvironmentalAlarm = machine.addState(&environmentalAlarmState);
 State* stHandleSecurityAlert = machine.addState(&handleSecurityAlert);
@@ -102,13 +100,15 @@ void setup() {
 /**
    * @brief Agregar transiciones entre estados.
 */
-  stSecurityEntry->addTransition(&checkCorrectPassword, stEventDoorsAndWindows);
-  stEventDoorsAndWindows->addTransition(&checkTimeout2sec, stEnvironmentalMonitoring);
-  stHandleSecurityAlert->addTransition(&checkTimeout6sec, stEventDoorsAndWindows);
-  stEnvironmentalMonitoring->addTransition(&checkTemperatureOver32, stEnvironmentalAlarm);
-  stEnvironmentalMonitoring->addTransition(&checkTimeout10sec, stEventDoorsAndWindows);
-  //stEnvironmentalAlarm->addTransition(&checkTemperatureOver32_5s, stHandleSecurityAlert);
-  stEnvironmentalAlarm->addTransition(&checkTemperatureOver32_5s, stEnvironmentalAlarm);
+  stSecurityEntry->addTransition(&checkCorrectPassword, stEventAmbiente);
+  stEventAmbiente->addTransition(&checkTemperature, stEnvironmentalMonitoring);
+  
+  stEnvironmentalMonitoring->addTransition(&checkTemperatureOver30, stEnvironmentalAlarm);
+  stEnvironmentalMonitoring->addTransition(&checkTimeout10sec, stEventAmbiente);
+  
+  stHandleSecurityAlert->addTransition(&checkTimeout6sec, stEventAmbiente);
+  //stEnvironmentalAlarm->addTransition(&checkTemperatureOver30_5s, stHandleSecurityAlert);
+  stEnvironmentalAlarm->addTransition(&checkTemperatureOver30_5s, stEnvironmentalAlarm);
   stEnvironmentalAlarm->addTransition(&checkTemperatureBelow30, stEnvironmentalMonitoring);
 
 /**
@@ -210,29 +210,39 @@ bool checkCorrectPassword() {
 }
 
 /**
-* @brief Estado de doors and windows que verifica cuando las entradas de aire(puertas y ventanas) afectan la luz o humedad/temperatura
+* @brief Estado ambiente que verifica cuando las entradas de aire afectan la luz o humedad/temperatura
 */
-void eventDoorsAndWindowsState() {
-  Serial.println("Procesando ambiente");
+void eventAmbiente() {
+  //Serial.println("Procesando ambiente");
   taskEnvironmentalMonitoring.Update();
 }
 
 /**
 * @brief Función para verificar el tiempo de espera de 2 segundos
 */
-bool checkTimeout2sec() {
+bool checkTemperature() {
+
+  /*
   if (!taskEnvironmentalMonitoring.IsActive()) {
     taskEnvironmentalMonitoring.Stop();
     taskEnvironmentalMonitoring.Reset();
     return true;
   }
   return false;
+  */
+  if (checkTemperatureOver30) {
+    taskEnvironmentalMonitoring.Stop();
+    taskEnvironmentalMonitoring.Reset();
+    return true;
+  }
+  return false;
+  
 }
 
 /**
-* @brief Función para verificar si se activó el estado door window para el ambiente
+* @brief Función para verificar si se activó el estado para el ambiente
 */
-bool checkDoorWindowActivated() {
+bool checkAmbienteActivated() {
   return true;
 }
 
@@ -248,10 +258,11 @@ void environmentalMonitoringState() {
 }
 
 /**
-* @brief Función para verificar si la temperatura supera los 32 grados Celsius
+* @brief Función para verificar si la temperatura supera los 30 grados Celsius
 */
-bool checkTemperatureOver32() {
-  if (DHT.getTemperature() > 26) {
+bool checkTemperatureOver30() {
+
+  if (DHT.getTemperature() > 20) {
     taskBeforeEnvironmentalMonitoring.Stop();
     taskAlarmAlert.Start();
     taskBeforeEnvironmentalMonitoring.Reset();
@@ -280,6 +291,7 @@ bool checkTimeout10sec() {
 void readTemperatureAndPhotoresistor() {
   readTemp();
   readPhotoresistor();
+  checkTemperatureOver30();
 }
 
 /**
@@ -294,7 +306,7 @@ void environmentalAlarmState() {
 /**
 * @brief Función para verificar si la temperatura supera los 32 grados Celsius durante 5 segundos
 */
-bool checkTemperatureOver32_5s() {
+bool checkTemperatureOver30_5s() {
   Serial.println(!taskAlarmAlert.IsActive());
   if (!taskAlarmAlert.IsActive()) {
     taskAlarmAlert.Stop();
@@ -309,7 +321,7 @@ bool checkTemperatureOver32_5s() {
 * @brief Función para verificar si la temperatura está por debajo de los 30 grados Celsius
 */
 bool checkTemperatureBelow30() {
-  if (DHT.getTemperature() < 30) {
+  if (DHT.getTemperature() < 20) {
     taskAlarmAlert.Reset();
     return true;
   }
@@ -384,12 +396,14 @@ void readTemp() {
   lcd.print("H%:");
   lcd.setCursor(4, 1);
   lcd.print(humidity, 1);
-  Serial.print(",\t");
+  Serial.print(",\t H:");
   Serial.print(humidity, 1);
   lcd.setCursor(9, 1);
   lcd.print("T:");
   lcd.setCursor(12, 1);
   lcd.print(temperature, 1);
+  
+  Serial.print("\t T:");
   Serial.print(temperature, 1);
   Serial.println();
 }
